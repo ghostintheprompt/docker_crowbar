@@ -1,0 +1,33 @@
+services:
+  policy:
+    build:
+      context: .
+      dockerfile: policy/Dockerfile
+    mem_limit: 128m        # makes the forced OOM deterministic and container-scoped
+    restart: "no"          # demo: stay down after the crowbar so the window is observable
+    ports:
+      - "7070:7070"        # published so crowbar.sh can reach it from the host
+
+  app-vulnerable:
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+    environment:
+      FAIL_MODE: open      # the reliability defect: allow when the sidecar is silent
+      POLICY_URL: "http://policy:7070"
+    ports:
+      - "8081:8080"
+    depends_on:
+      - policy
+
+  app-hardened:
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+    environment:
+      FAIL_MODE: closed    # the fix: deny when the sidecar is silent
+      POLICY_URL: "http://policy:7070"
+    ports:
+      - "8082:8080"
+    depends_on:
+      - policy
