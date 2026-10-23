@@ -1,0 +1,54 @@
+# Stage 2 on real CI: the same cache-poisoning mechanism as poison_cache_demo.sh,
+# shown with GitHub's own actions/cache across two jobs in THIS repo.
+#
+# What this demonstrates: a "build" job writes a payload into the shared Actions
+# cache, and a later "release" job restores that cache by key and runs what it
+# finds. The payload is a marker that prints a line. Nothing is published, no
+# secret is used, permissions are read-only.
+#
+# What makes it an ATTACK in the wild, and what this lab deliberately does NOT
+# wire up: a `pull_request_target` trigger that checks out and runs an
+# untrusted fork PR. That is what lets an outsider be the "build" job and reach
+# the trusted release job's cache (see the TanStack and Angular compromises).
+# This workflow runs only on manual dispatch, from this repo, against itself.
+name: stage2-cache-poison-lab
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  build-untrusted:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Restore the shared dependency cache
+        uses: actions/cache@v4   # pin to a SHA in production; v4 here for readability
+        with:
+          path: .ci-cache
+          key: deps-shared
+      - name: Write a payload into the cache (stands in for a compromised build step)
+        run: |
+          mkdir -p .ci-cache
+          printf '#!/usr/bin/env bash\necho "CACHE-POISON-MARKER: executed in the trusted release job"\n' > .ci-cache/postinstall.sh
+          chmod +x .ci-cache/postinstall.sh
+          echo "untrusted build wrote .ci-cache/postinstall.sh"
+
+  release-trusted:
+    needs: build-untrusted
+    runs-on: ubuntu-latest
+    steps:
+      - name: Restore the SAME shared cache key (this is the defect)
+        uses: actions/cache@v4
+        with:
+          path: .ci-cache
+          key: deps-shared
+      - name: Run the restored postinstall hook, as a real release pipeline would
+        run: |
+          if [ -x .ci-cache/postinstall.sh ]; then
+            echo "trusted release restored the cache and is running postinstall:"
+            ./.ci-cache/postinstall.sh
+          else
+            echo "cache clean, nothing poisoned ran"
+          fi
