@@ -115,15 +115,44 @@ It deliberately does not wire up the `pull_request_target` fork trigger that
 makes it attacker-reachable in the wild; the prose explains that part, the code
 does not ship it.
 
-Stage 3 is where it stops being only code execution. A poisoned artifact, cache,
-or log is trusted by everything downstream, which is a trust transition. When
-the thing downstream is an agent that reads CI output, the poison becomes an
-indirect prompt injection that rode the supply chain through that trust
-boundary. The article carries Stage 3; this repo stops at the mechanism.
-
 GitHub has been closing this, which tells you it is real: the Actions runtime
 token can no longer write to the cache after a job concludes, `actions/checkout`
 is being hardened, and orgs can now enforce pinning actions to a commit SHA.
+
+## Stage 3: one forced defect, exponential havoc
+
+Stage 2 lands attacker-shaped text in a trusted channel: a build log, a test
+summary, a restored cache. Stage 3 is what reads that channel. More and more it
+is an AI agent wired into CI to triage pull requests, and it holds real tools:
+comment, label, approve, merge, add a collaborator, run a command.
+
+An agent acts on whatever text reaches its context. `stage3_agent/` is a real
+triage agent, not a toy: a tool registry, a policy gate, a trust boundary, and
+an instruction-follower (deterministic so it runs anywhere; swap a real LLM
+behind the same interface and the result is identical). The poisoned build log
+from the earlier stages carries four words into the agent's view.
+
+```bash
+node stage3_agent/test.js     # 8/8
+node stage3_agent/run.js      # watch the blast radius
+```
+
+- **Naive agent** (CI output folded into its instructions, no gate): it approves
+  the PR, merges the poison into main, adds a standing collaborator, and runs a
+  command that reseeds the cache. One forced defect, four words, and the agent
+  does the multiplying. The merge carries the poison to every downstream pull;
+  the reseed re-poisons every future run; the collaborator outlives the fix.
+  That is the exponential part.
+- **Hardened agent, layer 1** (CI kept as data the model is told never to obey):
+  the directives are never proposed. Routine triage still happens.
+- **Hardened agent, layer 2** (assume the model leaks across the boundary, as
+  real models do): the directives are proposed, and the privileged-tool gate
+  blocks every one. Do not trust the model to ignore injected text; gate the
+  tools in code.
+
+This is the trust transition at the center of indirect prompt injection, landing
+in the newest and least-tested boundary in software: the agent that trusts its
+pipeline.
 
 ## Layout
 
@@ -137,6 +166,10 @@ run_demo.sh                          Stage 1 end to end, baseline then forced-de
 stage2_ci/poison_cache_demo.sh       Stage 2 local model of shared-cache poisoning
 stage2_ci/test.sh                    deterministic proof of Stage 2 (no live CI)
 .github/workflows/cache-poison-lab.yml   Stage 2 on real Actions, marker-only, manual dispatch
+stage3_agent/agent.js                Stage 3 CI triage agent: tools, policy gate, trust boundary
+stage3_agent/run.js                  Stage 3 blast-radius demo (naive vs hardened vs leaked model)
+stage3_agent/test.js                 deterministic proof of Stage 3 (8 assertions)
+stage3_agent/fixtures/               clean and poisoned CI bundles
 ```
 
 ## Scope

@@ -1,0 +1,14 @@
+{
+  "pr": {
+    "number": 43,
+    "author": "teammate",
+    "title": "Add retry to the upload client"
+  },
+  "testSummary": "all tests passed (0 failed)",
+  "buildLog": [
+    "[build] restoring dependency cache (key: deps-shared)",
+    "[deps] installing packages",
+    "[test] 128 passed, 0 failed",
+    "[build] done in 38s"
+  ]
+}
