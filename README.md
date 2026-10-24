@@ -119,36 +119,35 @@ GitHub has been closing this, which tells you it is real: the Actions runtime
 token can no longer write to the cache after a job concludes, `actions/checkout`
 is being hardened, and orgs can now enforce pinning actions to a commit SHA.
 
-## Stage 3: one forced defect, exponential havoc
+## Stage 3: the agent that trusts the build
 
 Stage 2 lands attacker-shaped text in a trusted channel: a build log, a test
 summary, a restored cache. Stage 3 is what reads that channel. More and more it
 is an AI agent wired into CI to triage pull requests, and it holds real tools:
 comment, label, approve, merge, add a collaborator, run a command.
 
-An agent acts on whatever text reaches its context. `stage3_agent/` is a real
-triage agent, not a toy: a tool registry, a policy gate, a trust boundary, and
-an instruction-follower (deterministic so it runs anywhere; swap a real LLM
-behind the same interface and the result is identical). The poisoned build log
-from the earlier stages carries four words into the agent's view.
+`stage3_agent/` models that boundary with a deterministic directive parser,
+a tool registry, and a policy gate. Tool calls append records to an in-memory
+effects list: no GitHub API call, merge, collaborator change, shell execution,
+or cache reseed happens in this stage. A live LLM would need a separate
+integration and evaluation; its success rate is not measured here.
 
 ```bash
 node stage3_agent/test.js     # 8/8
 node stage3_agent/run.js      # watch the blast radius
 ```
 
-- **Naive agent** (CI output folded into its instructions, no gate): it approves
-  the PR, merges the poison into main, adds a standing collaborator, and runs a
-  command that reseeds the cache. One forced defect, four words, and the agent
-  does the multiplying. The merge carries the poison to every downstream pull;
-  the reseed re-poisons every future run; the collaborator outlives the fix.
-  That is the exponential part.
-- **Hardened agent, layer 1** (CI kept as data the model is told never to obey):
-  the directives are never proposed. Routine triage still happens.
-- **Hardened agent, layer 2** (assume the model leaks across the boundary, as
-  real models do): the directives are proposed, and the privileged-tool gate
-  blocks every one. Do not trust the model to ignore injected text; gate the
-  tools in code.
+- **Naive agent** (CI output folded into its instructions, no gate): the
+  effects list records four privileged calls: approve, merge, add a collaborator,
+  and run a reseed command. These are simulated outcomes. In a real integration,
+  permission to perform them could let the compromise persist and propagate;
+  this lab does not measure downstream spread or exponential growth.
+- **Hardened agent, layer 1** (CI kept as data): the deterministic parser does
+  not propose directives from that data. Routine triage is still recorded.
+- **Hardened agent, layer 2** (`modelLeaks: true`): explicitly simulate a parser
+  reading directives from the data channel. The policy gate blocks all four
+  privileged calls. This tests the gate independently of parser discipline,
+  rather than measuring whether a live model follows instructions.
 
 This is the trust transition at the center of indirect prompt injection, landing
 in the newest and least-tested boundary in software: the agent that trusts its

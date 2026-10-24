@@ -16,15 +16,14 @@
  * instruction channel and gates its privileged tools. This module makes that
  * boundary a single switch (trustMode) so you can watch both outcomes.
  *
- * The model here is deterministic on purpose: prompt injection is an
- * architectural flaw, not a model-specific one, so a deterministic
- * instruction-follower demonstrates it faithfully and runs anywhere. Swap in a
- * real LLM by implementing the same Model.decide(context) interface; the
- * vulnerability and the fix are identical.
+ * The parser here is deterministic. It models a chosen boundary failure and
+ * tests the tool gate; it does not measure a live LLM's behavior or attack
+ * success rate. A live-model adapter requires its own evaluation.
  */
 
 // ── Tools the agent can actually call ───────────────────────────────────────
-// Each tool records a real effect so the run is inspectable. "privileged"
+// Each tool appends an in-memory effect record; it performs no external action.
+// "privileged"
 // tools are the ones that change trust or ship code.
 
 function makeTools(effects) {
